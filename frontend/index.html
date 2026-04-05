@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notes App</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        .form { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .note { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .note-content { flex: 1; }
+        .delete-btn { background: #ff4444; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+        .delete-btn:hover { background: #cc0000; }
+        .status { text-align: center; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .checking { background: #fff3cd; color: #856404; }
+        .empty { text-align: center; color: #999; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 Notes App</h1>
+
+        <div id="status" class="status checking">⏳ Checking connection...</div>
+
+        <div class="form">
+            <input type="text" id="title" placeholder="Note title..." />
+            <textarea id="content" rows="3" placeholder="Note content..."></textarea>
+            <button onclick="addNote()">➕ Add Note</button>
+        </div>
+
+        <div id="notes-list"></div>
+    </div>
+
+    <script>
+        // ✅ Local pe localhost:3000, K8s pe /api (Nginx proxy)
+        const API = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api'
+            : '/api';
+
+        // Health check
+        async function checkHealth() {
+            try {
+                const res = await fetch(`${API}/notes`);
+                if (res.ok) {
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('status').innerText = '✅ MongoDB Connected';
+                } else {
+                    throw new Error('Not OK');
+                }
+            } catch {
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').innerText = '❌ MongoDB Disconnected';
+            }
+        }
+
+        // Get all notes
+        async function getNotes() {
+            try {
+                const res = await fetch(`${API}/notes`);
+                const notes = await res.json();
+                const list = document.getElementById('notes-list');
+
+                if (notes.length === 0) {
+                    list.innerHTML = '<div class="empty">📭 Koi note nahi hai — pehla note add karo!</div>';
+                    return;
+                }
+
+                list.innerHTML = notes.map(note => `
+                    <div class="note">
+                        <div class="note-content">
+                            <strong>${note.title}</strong>
+                            <p>${note.content}</p>
+                        </div>
+                        <button class="delete-btn" onclick="deleteNote('${note._id}')">🗑️ Delete</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.log('Error fetching notes:', err);
+                document.getElementById('notes-list').innerHTML = '<div class="empty">❌ Notes load nahi hue!</div>';
+            }
+        }
+
+        // Add note
+        async function addNote() {
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+
+            if (!title || !content) {
+                alert('⚠️ Title aur content dono likho!');
+                return;
+            }
+
+            try {
+                await fetch(`${API}/notes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content })
+                });
+                document.getElementById('title').value = '';
+                document.getElementById('content').value = '';
+                getNotes();
+            } catch (err) {
+                alert('❌ Note add nahi hua!');
+            }
+        }
+
+        // Delete note
+        async function deleteNote(id) {
+            if (!confirm('Delete karna hai?')) return;
+            try {
+                await fetch(`${API}/notes/${id}`, { method: 'DELETE' });
+                getNotes();
+            } catch (err) {
+                alert('❌ Note delete nahi hua!');
+            }
+        }
+
+        checkHealth();
+        getNotes();
+    </script>
+</body>
+</html>
